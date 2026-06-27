@@ -6,3 +6,12 @@ edition = "2021"
 [[bin]]
 name = "run"
 path = "src/main.rs"
+
+[dependencies]
+clap             = { workspace = true }
+taskfile-loader  = { workspace = true }
+task-runner      = { workspace = true }
+taskfile-schema  = { workspace = true }
+syon-integration = { workspace = true }
+serde_yaml       = { workspace = true }
+colored          = { workspace = true }
