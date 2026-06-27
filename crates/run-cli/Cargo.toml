@@ -15,3 +15,6 @@ taskfile-schema  = { workspace = true }
 syon-integration = { workspace = true }
 serde_yaml       = { workspace = true }
 colored          = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
