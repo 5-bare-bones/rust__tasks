@@ -2,3 +2,10 @@
 name    = "task-runner"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+taskfile-schema = { workspace = true }
+thiserror       = { workspace = true }
+petgraph        = { workspace = true }
+regex           = { workspace = true }
+indexmap        = { workspace = true }
