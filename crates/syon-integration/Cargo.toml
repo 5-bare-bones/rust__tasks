@@ -2,3 +2,9 @@
 name    = "syon-integration"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+syon-parser     = { git = "https://github.com/object-notation-environment/safe-yaml-object-notation", package = "syon-parser" }
+taskfile-schema = { workspace = true }
+thiserror       = { workspace = true }
+indexmap        = { workspace = true }
