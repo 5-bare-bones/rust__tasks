@@ -2,3 +2,11 @@
 name    = "taskfile-loader"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+taskfile-schema  = { workspace = true }
+syon-integration = { workspace = true }
+serde_yaml       = { workspace = true }
+thiserror        = { workspace = true }
+walkdir          = { workspace = true }
+indexmap         = { workspace = true }
