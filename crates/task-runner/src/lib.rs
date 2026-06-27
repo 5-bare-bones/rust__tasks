@@ -19,14 +19,19 @@ pub enum RunError {
     Io(#[from] std::io::Error),
 }
 
+/// Callback for routing Python commands to an embedded interpreter.
+/// Receives the script path and its arguments; returns the exit code.
+pub type PythonRunner = Box<dyn Fn(&str, &[String]) -> Result<i32, RunError>>;
+
 pub fn run_task(
     taskfile: &Taskfile,
     task_name: &str,
     extra_vars: &HashMap<String, String>,
+    python_runner: Option<&PythonRunner>,
 ) -> Result<(), RunError> {
     let order = topo_order(taskfile, task_name)?;
     for name in &order {
-        execute_task(taskfile, name, extra_vars)?;
+        execute_task(taskfile, name, extra_vars, python_runner)?;
     }
     Ok(())
 }
@@ -35,7 +40,6 @@ fn topo_order<'tf>(
     taskfile: &'tf Taskfile,
     root: &'tf str,
 ) -> Result<Vec<String>, RunError> {
-    // Collect reachable task names (deps only; cmd task-calls run inline).
     let reachable = collect_dep_reachable(taskfile, root)?;
 
     let mut graph: DiGraphMap<&str, ()> = DiGraphMap::new();
@@ -51,27 +55,24 @@ fn topo_order<'tf>(
         if let Some(deps) = &task.deps {
             for dep in deps {
                 let dep_name = dep_task_name(dep);
-                // edge: dep_name → name (dep runs before name)
+                // edge: dep_name → name means dep runs before name
                 graph.add_edge(dep_name, name.as_str(), ());
             }
         }
     }
 
-    toposort(&graph, None).map_err(|cycle| {
-        RunError::CycleDetected(cycle.node_id().to_string())
-    }).map(|order| {
-        order
-            .into_iter()
-            .filter(|&n| reachable.iter().any(|r| r == n))
-            .map(str::to_string)
-            .collect()
-    })
+    toposort(&graph, None)
+        .map_err(|cycle| RunError::CycleDetected(cycle.node_id().to_string()))
+        .map(|order| {
+            order
+                .into_iter()
+                .filter(|&n| reachable.iter().any(|r| r == n))
+                .map(str::to_string)
+                .collect()
+        })
 }
 
-fn collect_dep_reachable<'tf>(
-    taskfile: &'tf Taskfile,
-    root: &'tf str,
-) -> Result<Vec<String>, RunError> {
+fn collect_dep_reachable(taskfile: &Taskfile, root: &str) -> Result<Vec<String>, RunError> {
     let mut visited: HashSet<String> = HashSet::new();
     let mut queue = vec![root.to_string()];
     let mut order = Vec::new();
@@ -103,20 +104,36 @@ fn dep_task_name(dep: &Dep) -> &str {
     }
 }
 
+fn is_python_cmd(s: &str) -> bool {
+    s.starts_with("python3 ") || s.starts_with("python ")
+        || s == "python3"
+        || s == "python"
+}
+
+fn split_python_args(cmd: &str) -> (String, Vec<String>) {
+    let rest = cmd
+        .strip_prefix("python3 ")
+        .or_else(|| cmd.strip_prefix("python "))
+        .unwrap_or("");
+    let mut parts = rest.split_whitespace();
+    let script = parts.next().unwrap_or("").to_string();
+    let args = parts.map(str::to_string).collect();
+    (script, args)
+}
+
 fn execute_task(
     taskfile: &Taskfile,
     task_name: &str,
     extra_vars: &HashMap<String, String>,
+    python_runner: Option<&PythonRunner>,
 ) -> Result<(), RunError> {
     let task = taskfile
         .tasks
         .get(task_name)
         .ok_or_else(|| RunError::TaskNotFound(task_name.to_string()))?;
 
-    // Build var context (lowest → highest priority)
     let mut vars: HashMap<String, String> = HashMap::new();
 
-    // Built-ins
     vars.insert("TASK".into(), task_name.to_string());
     if let Ok(cwd) = std::env::current_dir() {
         let cwd_str = cwd.display().to_string();
@@ -124,21 +141,16 @@ fn execute_task(
         vars.insert("TASKFILE_DIR".into(), cwd_str);
     }
 
-    // Taskfile-level vars
     if let Some(tf_vars) = &taskfile.vars {
         for (k, v) in tf_vars {
             vars.insert(k.clone(), expand_var(v)?);
         }
     }
-
-    // Task-level vars
     if let Some(task_vars) = &task.vars {
         for (k, v) in task_vars {
             vars.insert(k.clone(), expand_var(v)?);
         }
     }
-
-    // CLI overrides
     for (k, v) in extra_vars {
         vars.insert(k.clone(), v.clone());
     }
@@ -159,8 +171,23 @@ fn execute_task(
                     eprintln!("  > {expanded}");
                 }
 
-                let mut builder = shell_command(&expanded);
+                // Route Python commands to the embedded interpreter when available.
+                if is_python_cmd(&expanded) {
+                    if let Some(runner) = python_runner {
+                        let (script, args) = split_python_args(&expanded);
+                        let code = runner(&script, &args)?;
+                        if code != 0 && !ignore_error {
+                            return Err(RunError::CommandFailed(code));
+                        }
+                        continue;
+                    }
+                    // No embedded runner — fall through to system shell with a note.
+                    eprintln!(
+                        "note: no embedded Python; running via system shell: {expanded}"
+                    );
+                }
 
+                let mut builder = shell_command(&expanded);
                 if let Some(dir) = &task.dir {
                     builder.current_dir(substitute_vars(dir, &vars));
                 }
@@ -190,7 +217,7 @@ fn execute_task(
                         sub_extra.insert(k.clone(), expand_var(v)?);
                     }
                 }
-                run_task(taskfile, sub_task, &sub_extra)?;
+                run_task(taskfile, sub_task, &sub_extra, python_runner)?;
             }
         }
     }

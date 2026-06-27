@@ -12,3 +12,7 @@ tasks:
     desc: List tasks using the run binary itself
     cmds:
       - cargo run -p run-cli -- list
+  build-bundled-release:
+    desc: Build run binary with embedded Python (requires PyOxidizer)
+    cmds:
+      - cargo build -p run-cli --release --features bundled-python
