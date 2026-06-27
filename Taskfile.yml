@@ -1,0 +1,14 @@
+version: '3'
+tasks:
+  build-run-binary:
+    desc: Build the run executable in release mode
+    cmds:
+      - cargo build -p run-cli --release
+  run-all-tests:
+    desc: Run the full workspace test suite
+    cmds:
+      - cargo test --workspace
+  list-available-tasks:
+    desc: List tasks using the run binary itself
+    cmds:
+      - cargo run -p run-cli -- list

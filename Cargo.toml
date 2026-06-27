@@ -1,0 +1,26 @@
+[workspace]
+members = [
+    "crates/run-cli",
+    "crates/taskfile-schema",
+    "crates/taskfile-loader",
+    "crates/task-runner",
+    "crates/syon-integration",
+]
+resolver = "2"
+
+[workspace.dependencies]
+anyhow           = "1"
+thiserror        = "1"
+serde            = { version = "1", features = ["derive"] }
+serde_yaml       = "0.9"
+serde_json       = "1"
+indexmap         = { version = "2", features = ["serde"] }
+petgraph         = "0.6"
+clap             = { version = "4", features = ["derive"] }
+walkdir          = "2"
+regex            = "1"
+colored          = "2"
+taskfile-schema  = { path = "crates/taskfile-schema" }
+taskfile-loader  = { path = "crates/taskfile-loader" }
+task-runner      = { path = "crates/task-runner" }
+syon-integration = { path = "crates/syon-integration" }
